@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-#MISE description="Create a service module from generate-module.d"
+#MISE description="Создать сервисный модуль из generate-module.d"
 
 import os
 from pathlib import Path

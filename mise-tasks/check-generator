@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-#MISE description="Verify module generation in a temporary copy"
+#MISE description="Проверить генерацию модуля во временной копии"
 
 import os
 from pathlib import Path

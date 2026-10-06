@@ -1,4 +1,5 @@
 [tasks.all]
+description = "Полный цикл: генерация, зависимости, сборка, тесты, линт"
 run = [
     { task = "generate" },
     { task = "modules" },
@@ -8,17 +9,21 @@ run = [
 ]
 
 [tasks.generate]
+description = "Запустить go generate по всем пакетам"
 run = "go generate ./..."
 
 [tasks.modules]
+description = "Привести зависимости в порядок (go mod tidy)"
 run = "go mod tidy"
 
 [tasks.build]
+description = "Собрать все пакеты (go build ./...)"
 run = "go build ./..."
 
 [tasks.test]
+description = "Запустить unit-тесты (go test ./...)"
 run = "go test ./..."
 
 [tasks.lint]
+description = "Запустить golangci-lint"
 run = "golangci-lint run"
-

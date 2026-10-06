@@ -20,25 +20,28 @@ protoc-gen-go-grpc = "1.6.2"
 python = "3.13"
 
 [tasks.all]
-description = "Generate, tidy, build, test, and lint every module sequentially"
+description = "Сгенерировать код, обновить зависимости, собрать, протестировать и прогнать линтер по каждому модулю последовательно"
 run = '''
 MISE_JOBS=1 mise run //lib/...:all
 MISE_JOBS=1 mise run //modules/...:all
 '''
 
 [tasks.local-up]
-description = "Build modules locally and start the complete local environment"
+description = "Собрать модули локально и запустить полное локальное окружение"
 run = "python3 mise-tasks/local-env up"
 
 [tasks.local-down]
-description = "Stop the local environment, preserving data volumes"
+description = "Остановить локальное окружение, сохранив тома с данными"
 run = "python3 mise-tasks/local-env down"
 
 [tasks.local-status]
+description = "Показать статус запущенных контейнеров"
 run = "python3 mise-tasks/local-env ps"
 
 [tasks.local-config]
+description = "Показать итоговую объединённую конфигурацию Compose"
 run = "python3 mise-tasks/local-env config"
 
 [tasks.local-logs]
+description = "Показать логи всех контейнеров"
 run = "python3 mise-tasks/local-env logs"

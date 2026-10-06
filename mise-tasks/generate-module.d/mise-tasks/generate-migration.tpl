@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-#MISE description="Generate and register a MySQL migration"
+#MISE description="Сгенерировать и зарегистрировать MySQL-миграцию"
 
 import json
 from pathlib import Path

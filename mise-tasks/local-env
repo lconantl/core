@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-#MISE description="Manage infrastructure and all module Compose files"
+#MISE description="Управлять инфраструктурой и всеми Compose-файлами модулей"
 
 import argparse
 import os

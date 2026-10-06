@@ -1,4 +1,5 @@
 [tasks.all]
+description = "Полный цикл: генерация, зависимости, сборка, unit-тесты, интеграционные тесты, линт"
 run = [
     { task = "generate" },
     { task = "modules" },
@@ -9,6 +10,7 @@ run = [
 ]
 
 [tasks.generate]
+description = "Сгенерировать Go-код из всех контрактов (protobuf + OpenAPI + go generate)"
 run = [
     { task = "grpc-generate" },
     { task = "oapi-generate" },
@@ -16,9 +18,11 @@ run = [
 ]
 
 [tasks.go-generate]
+description = "Запустить go generate по всем пакетам модуля"
 run = "go generate ./..."
 
 [tasks.grpc-generate]
+description = "Сгенерировать Go-код из protobuf-контрактов (.proto)"
 run = """
 #!/usr/bin/env sh
 set -eu
@@ -34,7 +38,9 @@ find . -name '*.proto' | while read -r proto_file; do
         "$proto_file"
 done
 """
+
 [tasks.oapi-generate]
+description = "Сгенерировать Go-код из OpenAPI-контракта (.oapi.yaml)"
 run = """
 #!/usr/bin/env sh
 set -eu
@@ -48,14 +54,17 @@ done
 """
 
 [tasks."modules"]
+description = "Привести зависимости модуля в порядок (go mod tidy)"
 run = "go mod tidy"
 
 [tasks.build]
+description = "Сгенерировать контракты и собрать Linux-бинарник в dist/auth"
 depends = ["generate"]
 env = { GOOS = "linux", CGO_ENABLED = "0" }
 run = "go build -v -trimpath -o dist/auth ./cmd"
 
 [tasks."test"]
+description = "Запустить unit-тесты (без integration-tests)"
 run = '''
 #!/usr/bin/env sh
 set -eu
@@ -65,9 +74,11 @@ printf '%s\n' "$packages" | awk '!/\/internal\/integration-tests($|\/)/' | xargs
 '''
 
 [tasks."lint"]
+description = "Запустить golangci-lint"
 run = "golangci-lint run"
 
 [tasks.integration-tests]
+description = "Собрать Docker-образ и запустить интеграционные тесты (testcontainers)"
 depends = ["build"]
 run = [
     "docker build --tag distributed-programming-auth:integration .",
