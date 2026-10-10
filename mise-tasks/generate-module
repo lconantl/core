@@ -26,9 +26,9 @@ def main():
             relative_path = Path(*(name if part == "template" else part for part in relative_path.parts))
             destination = target / relative_path
             destination.parent.mkdir(parents=True, exist_ok=True)
-            text = template.read_text()
+            text = template.read_text(encoding="utf-8")
             text = text.replace("template", name).replace("Template", title).replace("TEMPLATE", name.upper())
-            destination.write_text(text)
+            destination.write_text(text, encoding="utf-8")
             if text.startswith("#!"):
                 destination.chmod(0o755)
         env = dict(os.environ, GOWORK="off")
