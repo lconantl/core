@@ -77,3 +77,57 @@ func TestNewCredentialsEmptyPasswordHash(test *testing.T) {
 		test.Fatal("Credentials не должны создаваться")
 	}
 }
+
+func TestChangePasswordHash(test *testing.T) {
+	id := uuid.New()
+
+	credentials, err := domain.NewCredentials(
+		id,
+		"antllcon",
+		"old-hash",
+	)
+
+	if err != nil {
+		test.Fatal(err)
+	}
+
+	err = credentials.ChangePasswordHash("new-hash")
+
+	if err != nil {
+		test.Fatal(err)
+	}
+
+	if credentials.PasswordHash() != "new-hash" {
+		test.Fatal("Хэш пароля не изменился")
+	}
+
+	if credentials.UserID() != id {
+		test.Fatal("ID пользователя изменился")
+	}
+
+	if credentials.Username() != "antllcon" {
+		test.Fatal("Username пользователя изменился")
+	}
+}
+
+func TestChangePasswordHashEmpty(test *testing.T) {
+	credentials, err := domain.NewCredentials(
+		uuid.New(),
+		"antllcon",
+		"old-hash",
+	)
+
+	if err != nil {
+		test.Fatal(err)
+	}
+
+	err = credentials.ChangePasswordHash("")
+
+	if err != domain.ErrInvalidPasswordHash {
+		test.Fatal("Ожидалась ошибка пустого хэша")
+	}
+
+	if credentials.PasswordHash() != "old-hash" {
+		test.Fatal("Старый хэш не должен изменяться")
+	}
+}

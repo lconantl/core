@@ -49,3 +49,12 @@ func (credentials *Credentials) Username() string {
 func (credentials *Credentials) PasswordHash() string {
 	return credentials.passwordHash
 }
+
+func (credentials *Credentials) ChangePasswordHash(newHash string) error {
+	if newHash == "" {
+		return ErrInvalidPasswordHash
+	}
+
+	credentials.passwordHash = newHash
+	return nil
+}
