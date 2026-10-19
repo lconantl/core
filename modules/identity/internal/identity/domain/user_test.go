@@ -24,21 +24,21 @@ func remove(user *domain.User) error {
 	return nil
 }
 
-func check(t *testing.T, i transition) {
-	t.Helper()
+func check(test *testing.T, testCase transition) {
+	test.Helper()
 
-	user, err := domain.LoadUser(uuid.New(), i.from, domain.Profile{})
-	require.NoError(t, err)
+	user, err := domain.LoadUser(uuid.New(), testCase.from, domain.Profile{})
+	require.NoError(test, err)
 
-	err = i.action(user)
+	err = testCase.action(user)
 
-	if i.err != nil {
-		require.ErrorIs(t, err, i.err)
+	if testCase.err != nil {
+		require.ErrorIs(test, err, testCase.err)
 	} else {
-		require.NoError(t, err)
+		require.NoError(test, err)
 	}
 
-	require.Equal(t, i.to, user.Status())
+	require.Equal(test, testCase.to, user.Status())
 }
 
 func TestUserStatus(test *testing.T) {
@@ -52,8 +52,8 @@ func TestUserStatus(test *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		test.Run(testCase.name, func(t *testing.T) {
-			check(t, testCase)
+		test.Run(testCase.name, func(test *testing.T) {
+			check(test, testCase)
 		})
 	}
 }
