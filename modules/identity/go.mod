@@ -14,6 +14,7 @@ require (
 	github.com/go-chi/chi/v5 v5.3.2
 	github.com/go-sql-driver/mysql v1.10.1
 	github.com/kelseyhightower/envconfig v1.4.0
+	github.com/nyaruka/phonenumbers v1.8.1
 	github.com/stretchr/testify v1.12.1
 	github.com/testcontainers/testcontainers-go v0.44.0
 	github.com/testcontainers/testcontainers-go/modules/mysql v0.44.0
