@@ -8,19 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func validProfile(test *testing.T) domain.Profile {
-	test.Helper()
-
-	profile, err := domain.NewProfile(domain.ProfileFields{
-		FirstName: "Иван",
-		LastName:  "Смирнов",
-		Email:     "antllcon.core@email.com",
-	})
-	require.NoError(test, err)
-
-	return profile
-}
-
 type transition struct {
 	name   string
 	from   domain.UserStatus
@@ -119,7 +106,7 @@ func TestLoadUser(test *testing.T) {
 }
 
 func TestNewUser(test *testing.T) {
-	user, err := domain.NewUser(uuid.New(), domain.Profile{})
+	user, err := domain.NewUser(uuid.New(), validProfile(test))
 
 	require.NoError(test, err)
 	require.Equal(test, domain.UserStatusPending, user.Status())
