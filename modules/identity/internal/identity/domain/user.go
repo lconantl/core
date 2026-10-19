@@ -6,13 +6,15 @@ import (
 )
 
 var (
-	ErrorInvalidUserID     = errors.New("некорректный ID пользователя")
-	ErrorInvalidUserStatus = errors.New("некорректный статус пользователя")
+	ErrInvalidUserID           = errors.New("некорректный ID пользователя")
+	ErrInvalidUserStatus       = errors.New("некорректный статус пользователя")
+	ErrInvalidStatusTransition = errors.New("некорректная смена статуса")
 )
 
 const (
 	UserStatusPending UserStatus = "pending"
 	UserStatusActive  UserStatus = "active"
+	UserStatusDeleted UserStatus = "deleted"
 )
 
 type UserStatus string
@@ -24,18 +26,16 @@ type User struct {
 }
 
 func NewUser(id uuid.UUID, profile Profile) (*User, error) {
-	return RestoreUser(id, UserStatusPending, profile)
+	return LoadUser(id, UserStatusPending, profile)
 }
 
-func RestoreUser(id uuid.UUID, status UserStatus, profile Profile) (*User, error) {
+func LoadUser(id uuid.UUID, status UserStatus, profile Profile) (*User, error) {
 	if id == uuid.Nil() {
-		return nil, ErrorInvalidUserID
+		return nil, ErrInvalidUserID
 	}
 
-	switch status {
-	case UserStatusPending, UserStatusActive:
-	default:
-		return nil, ErrorInvalidUserStatus
+	if !status.IsValid() {
+		return nil, ErrInvalidUserStatus
 	}
 
 	return &User{
@@ -71,6 +71,19 @@ func (user *User) Activate() error {
 		return nil
 
 	default:
-		return ErrorInvalidUserStatus
+		return ErrInvalidStatusTransition
 	}
+}
+
+func (user *User) Delete() {
+	user.status = UserStatusDeleted
+}
+
+func (status UserStatus) IsValid() bool {
+	switch status {
+	case UserStatusPending, UserStatusActive, UserStatusDeleted:
+		return true
+	}
+
+	return false
 }
