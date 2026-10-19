@@ -57,3 +57,63 @@ func TestUserStatus(test *testing.T) {
 		})
 	}
 }
+
+type load struct {
+	name   string
+	id     uuid.UUID
+	status domain.UserStatus
+	err    error
+}
+
+func checkLoad(test *testing.T, testCase load) {
+	test.Helper()
+
+	profile := domain.Profile{FirstName: "Степан", Email: "antllcon.core@email.com"}
+
+	user, err := domain.LoadUser(testCase.id, testCase.status, profile)
+
+	if testCase.err != nil {
+		require.ErrorIs(test, err, testCase.err)
+		require.Nil(test, user)
+		return
+	}
+
+	require.NoError(test, err)
+	require.Equal(test, testCase.id, user.ID())
+	require.Equal(test, testCase.status, user.Status())
+	require.Equal(test, profile, user.Profile())
+}
+
+func TestLoadUser(test *testing.T) {
+	id := uuid.New()
+
+	testCases := []load{
+		{"загрузка ожидающего аккаунта", id, domain.UserStatusPending, nil},
+		{"загрузка активного аккаунта", id, domain.UserStatusActive, nil},
+		{"загрузка удаленного аккаунта", id, domain.UserStatusDeleted, nil},
+		{"пустой статус", id, "", domain.ErrInvalidUserStatus},
+		{"неизвестный статус", id, "blocked", domain.ErrInvalidUserStatus},
+		{"статус в другом регистре", id, "Active", domain.ErrInvalidUserStatus},
+		{"пустой ID", uuid.Nil(), domain.UserStatusActive, domain.ErrInvalidUserID},
+	}
+
+	for _, testCase := range testCases {
+		test.Run(testCase.name, func(test *testing.T) {
+			checkLoad(test, testCase)
+		})
+	}
+}
+
+func TestNewUser(test *testing.T) {
+	user, err := domain.NewUser(uuid.New(), domain.Profile{})
+
+	require.NoError(test, err)
+	require.Equal(test, domain.UserStatusPending, user.Status())
+}
+
+func TestNewUserEmptyID(test *testing.T) {
+	user, err := domain.NewUser(uuid.Nil(), domain.Profile{})
+
+	require.ErrorIs(test, err, domain.ErrInvalidUserID)
+	require.Nil(test, user)
+}
