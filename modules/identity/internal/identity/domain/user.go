@@ -38,6 +38,10 @@ func LoadUser(id uuid.UUID, status UserStatus, profile Profile) (*User, error) {
 		return nil, ErrInvalidUserStatus
 	}
 
+	if profile.IsZero() {
+		return nil, ErrInvalidProfile
+	}
+
 	return &User{
 		id:      id,
 		status:  status,
@@ -57,8 +61,13 @@ func (user *User) Profile() Profile {
 	return user.profile
 }
 
-func (user *User) UpdateProfile(profile Profile) {
+func (user *User) UpdateProfile(profile Profile) error {
+	if profile.IsZero() {
+		return ErrInvalidProfile
+	}
+
 	user.profile = profile
+	return nil
 }
 
 func (user *User) Activate() error {

@@ -8,6 +8,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func validProfile(test *testing.T) domain.Profile {
+	test.Helper()
+
+	profile, err := domain.NewProfile(domain.ProfileFields{
+		FirstName: "Иван",
+		LastName:  "Смирнов",
+		Email:     "antllcon.core@email.com",
+	})
+	require.NoError(test, err)
+
+	return profile
+}
+
 type transition struct {
 	name   string
 	from   domain.UserStatus
@@ -27,7 +40,7 @@ func remove(user *domain.User) error {
 func check(test *testing.T, testCase transition) {
 	test.Helper()
 
-	user, err := domain.LoadUser(uuid.New(), testCase.from, domain.Profile{})
+	user, err := domain.LoadUser(uuid.New(), testCase.from, validProfile(test))
 	require.NoError(test, err)
 
 	err = testCase.action(user)
@@ -59,18 +72,17 @@ func TestUserStatus(test *testing.T) {
 }
 
 type load struct {
-	name   string
-	id     uuid.UUID
-	status domain.UserStatus
-	err    error
+	name    string
+	id      uuid.UUID
+	status  domain.UserStatus
+	profile domain.Profile
+	err     error
 }
 
 func checkLoad(test *testing.T, testCase load) {
 	test.Helper()
 
-	profile := domain.Profile{FirstName: "Степан", Email: "antllcon.core@email.com"}
-
-	user, err := domain.LoadUser(testCase.id, testCase.status, profile)
+	user, err := domain.LoadUser(testCase.id, testCase.status, testCase.profile)
 
 	if testCase.err != nil {
 		require.ErrorIs(test, err, testCase.err)
@@ -81,20 +93,22 @@ func checkLoad(test *testing.T, testCase load) {
 	require.NoError(test, err)
 	require.Equal(test, testCase.id, user.ID())
 	require.Equal(test, testCase.status, user.Status())
-	require.Equal(test, profile, user.Profile())
+	require.Equal(test, testCase.profile, user.Profile())
 }
 
 func TestLoadUser(test *testing.T) {
 	id := uuid.New()
+	profile := validProfile(test)
 
 	testCases := []load{
-		{"загрузка ожидающего аккаунта", id, domain.UserStatusPending, nil},
-		{"загрузка активного аккаунта", id, domain.UserStatusActive, nil},
-		{"загрузка удаленного аккаунта", id, domain.UserStatusDeleted, nil},
-		{"пустой статус", id, "", domain.ErrInvalidUserStatus},
-		{"неизвестный статус", id, "blocked", domain.ErrInvalidUserStatus},
-		{"статус в другом регистре", id, "Active", domain.ErrInvalidUserStatus},
-		{"пустой ID", uuid.Nil(), domain.UserStatusActive, domain.ErrInvalidUserID},
+		{"загрузка ожидающего аккаунта", id, domain.UserStatusPending, profile, nil},
+		{"загрузка активного аккаунта", id, domain.UserStatusActive, profile, nil},
+		{"загрузка удаленного аккаунта", id, domain.UserStatusDeleted, profile, nil},
+		{"пустой статус", id, "", profile, domain.ErrInvalidUserStatus},
+		{"неизвестный статус", id, "blocked", profile, domain.ErrInvalidUserStatus},
+		{"статус в другом регистре", id, "Active", profile, domain.ErrInvalidUserStatus},
+		{"пустой ID", uuid.Nil(), domain.UserStatusActive, profile, domain.ErrInvalidUserID},
+		{"пустой профиль", id, domain.UserStatusActive, domain.Profile{}, domain.ErrInvalidProfile},
 	}
 
 	for _, testCase := range testCases {
@@ -109,11 +123,4 @@ func TestNewUser(test *testing.T) {
 
 	require.NoError(test, err)
 	require.Equal(test, domain.UserStatusPending, user.Status())
-}
-
-func TestNewUserEmptyID(test *testing.T) {
-	user, err := domain.NewUser(uuid.Nil(), domain.Profile{})
-
-	require.ErrorIs(test, err, domain.ErrInvalidUserID)
-	require.Nil(test, user)
 }
