@@ -54,6 +54,6 @@ func TestPasswordHiddenInLogs(test *testing.T) {
 	password, err := domain.NewPassword("super-secret")
 	require.NoError(test, err)
 
-	require.NotContains(test, fmt.Sprint(password), "super-secret")
+	require.NotContains(test, password.String(), "super-secret")
 	require.NotContains(test, fmt.Sprintf("%v %s", password, password), "super-secret")
 }

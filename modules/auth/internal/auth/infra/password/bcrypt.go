@@ -28,7 +28,7 @@ func (hasher *Bcrypt) Hash(password domain.Password) (string, error) {
 	return string(hash), nil
 }
 
-func (hasher *Bcrypt) Verify(plain string, hash string) error {
+func (hasher *Bcrypt) Verify(plain, hash string) error {
 	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(plain))
 
 	if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {

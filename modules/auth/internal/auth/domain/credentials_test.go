@@ -9,8 +9,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	testUsername = "antllcon"
+	oldPlain     = "old-password"
+	newPlain     = "new-password"
+	wrongPlain   = "wrong-password"
+
+	hashPrefix = "hashed:"
+	oldHash    = hashPrefix + oldPlain
+	newHash    = hashPrefix + newPlain
+)
+
 var errHasherFailed = errors.New("хешер сломался")
 
+// fakeHasher: быстрый и предсказуемый хешер для доменных тестов.
 type fakeHasher struct {
 	hashErr error
 }
@@ -19,11 +31,11 @@ func (hasher fakeHasher) Hash(password domain.Password) (string, error) {
 	if hasher.hashErr != nil {
 		return "", hasher.hashErr
 	}
-	return "hashed:" + password.Plain(), nil
+	return hashPrefix + password.Plain(), nil
 }
 
-func (hasher fakeHasher) Verify(plain string, hash string) error {
-	if hash != "hashed:"+plain {
+func (hasher fakeHasher) Verify(plain, hash string) error {
+	if hash != hashPrefix+plain {
 		return domain.ErrWrongPassword
 	}
 	return nil
@@ -50,7 +62,7 @@ func mustPassword(test *testing.T, raw string) domain.Password {
 func newCredentials(test *testing.T) *domain.Credentials {
 	test.Helper()
 
-	credentials, err := domain.NewCredentials(uuid.New(), mustUsername(test, "antllcon"), mustPassword(test, "old-password"), fakeHasher{})
+	credentials, err := domain.NewCredentials(uuid.New(), mustUsername(test, testUsername), mustPassword(test, oldPlain), fakeHasher{})
 	require.NoError(test, err)
 
 	return credentials
@@ -59,12 +71,12 @@ func newCredentials(test *testing.T) *domain.Credentials {
 func TestNewCredentials(test *testing.T) {
 	id := uuid.New()
 
-	credentials, err := domain.NewCredentials(id, mustUsername(test, "antllcon"), mustPassword(test, "old-password"), fakeHasher{})
+	credentials, err := domain.NewCredentials(id, mustUsername(test, testUsername), mustPassword(test, oldPlain), fakeHasher{})
 
 	require.NoError(test, err)
 	require.Equal(test, id, credentials.UserID())
-	require.Equal(test, "antllcon", credentials.Username().String())
-	require.Equal(test, "hashed:old-password", credentials.PasswordHash(), "в Credentials хранится хеш, а не пароль")
+	require.Equal(test, testUsername, credentials.Username().String())
+	require.Equal(test, oldHash, credentials.PasswordHash(), "в Credentials хранится хеш, а не пароль")
 }
 
 type newCredentialsCase struct {
@@ -86,8 +98,8 @@ func checkNewCredentials(test *testing.T, testCase newCredentialsCase) {
 }
 
 func TestNewCredentialsErrors(test *testing.T) {
-	username := mustUsername(test, "antllcon")
-	password := mustPassword(test, "old-password")
+	username := mustUsername(test, testUsername)
+	password := mustPassword(test, oldPlain)
 
 	testCases := []newCredentialsCase{
 		{"пустой ID", uuid.Nil(), username, password, fakeHasher{}, domain.ErrInvalidUserID},
@@ -130,12 +142,12 @@ func checkLoadCredentials(test *testing.T, testCase loadCredentialsCase) {
 
 func TestLoadCredentials(test *testing.T) {
 	id := uuid.New()
-	username := mustUsername(test, "antllcon")
+	username := mustUsername(test, testUsername)
 
 	testCases := []loadCredentialsCase{
-		{"загрузка из хранилища", id, username, "hashed:old-password", nil},
-		{"пустой ID", uuid.Nil(), username, "hashed:old-password", domain.ErrInvalidUserID},
-		{"пустой логин", id, domain.Username{}, "hashed:old-password", domain.ErrInvalidUsername},
+		{"загрузка из хранилища", id, username, oldHash, nil},
+		{"пустой ID", uuid.Nil(), username, oldHash, domain.ErrInvalidUserID},
+		{"пустой логин", id, domain.Username{}, oldHash, domain.ErrInvalidUsername},
 		{"пустой хеш", id, username, "", domain.ErrInvalidPasswordHash},
 	}
 
@@ -149,8 +161,8 @@ func TestLoadCredentials(test *testing.T) {
 func TestVerifyPassword(test *testing.T) {
 	credentials := newCredentials(test)
 
-	require.NoError(test, credentials.VerifyPassword("old-password", fakeHasher{}))
-	require.ErrorIs(test, credentials.VerifyPassword("wrong-password", fakeHasher{}), domain.ErrWrongPassword)
+	require.NoError(test, credentials.VerifyPassword(oldPlain, fakeHasher{}))
+	require.ErrorIs(test, credentials.VerifyPassword(wrongPlain, fakeHasher{}), domain.ErrWrongPassword)
 	require.ErrorIs(test, credentials.VerifyPassword("", fakeHasher{}), domain.ErrWrongPassword)
 }
 
@@ -179,13 +191,13 @@ func checkChangePassword(test *testing.T, testCase changePasswordCase) {
 }
 
 func TestChangePassword(test *testing.T) {
-	newPassword := mustPassword(test, "new-password")
+	newPassword := mustPassword(test, newPlain)
 
 	testCases := []changePasswordCase{
-		{"смена пароля", "old-password", newPassword, fakeHasher{}, "hashed:new-password", nil},
-		{"неверный старый пароль", "wrong-password", newPassword, fakeHasher{}, "hashed:old-password", domain.ErrWrongPassword},
-		{"пустой новый пароль", "old-password", domain.Password{}, fakeHasher{}, "hashed:old-password", domain.ErrInvalidPassword},
-		{"хешер сломался", "old-password", newPassword, fakeHasher{hashErr: errHasherFailed}, "hashed:old-password", errHasherFailed},
+		{"смена пароля", oldPlain, newPassword, fakeHasher{}, newHash, nil},
+		{"неверный старый пароль", wrongPlain, newPassword, fakeHasher{}, oldHash, domain.ErrWrongPassword},
+		{"пустой новый пароль", oldPlain, domain.Password{}, fakeHasher{}, oldHash, domain.ErrInvalidPassword},
+		{"хешер сломался", oldPlain, newPassword, fakeHasher{hashErr: errHasherFailed}, oldHash, errHasherFailed},
 	}
 
 	for _, testCase := range testCases {
