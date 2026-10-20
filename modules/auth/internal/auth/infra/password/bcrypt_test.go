@@ -1,51 +1,61 @@
 package password_test
 
 import (
+	"auth/internal/auth/domain"
+	"auth/internal/auth/infra/password"
 	"testing"
 
-	"auth/internal/auth/infra/password"
+	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/bcrypt"
 )
 
-func TestHashAndVerify(test *testing.T) {
-	hash, err := password.Hash("my-password")
-
-	if err != nil {
-		test.Fatal(err)
-	}
-
-	if hash == "my-password" {
-		test.Fatal("Пароль не должен храниться в открытом виде")
-	}
-
-	err = password.Verify("my-password", hash)
-
-	if err != nil {
-		test.Fatal("Правильный пароль должен пройти проверку")
-	}
+func newHasher() *password.Bcrypt {
+	return password.NewBcrypt(bcrypt.MinCost)
 }
 
-func TestVerifyWrongPassword(test *testing.T) {
-	hash, err := password.Hash("my-password")
+func mustPassword(test *testing.T, raw string) domain.Password {
+	test.Helper()
 
-	if err != nil {
-		test.Fatal(err)
-	}
+	value, err := domain.NewPassword(raw)
+	require.NoError(test, err)
 
-	err = password.Verify("wrong-password", hash)
-
-	if err == nil {
-		test.Fatal("Неправильный пароль не должен пройти проверку")
-	}
+	return value
 }
 
-func TestHashEmptyPassword(test *testing.T) {
-	hash, err := password.Hash("")
+func TestBcryptHashAndVerify(test *testing.T) {
+	hasher := newHasher()
 
-	if err != password.ErrEmptyPassword {
-		test.Fatal("Ожидалась ошибка пустого пароля")
-	}
+	hash, err := hasher.Hash(mustPassword(test, "correct-horse"))
+	require.NoError(test, err)
 
-	if hash != "" {
-		test.Fatal("Хэш не должен создаваться")
-	}
+	require.NotEqual(test, "correct-horse", hash)
+	require.NoError(test, hasher.Verify("correct-horse", hash))
+}
+
+func TestBcryptWrongPassword(test *testing.T) {
+	hasher := newHasher()
+
+	hash, err := hasher.Hash(mustPassword(test, "correct-horse"))
+	require.NoError(test, err)
+
+	require.ErrorIs(test, hasher.Verify("wrong-horse", hash), domain.ErrWrongPassword)
+}
+
+func TestBcryptSaltedHashes(test *testing.T) {
+	hasher := newHasher()
+	plain := mustPassword(test, "correct-horse")
+
+	first, err := hasher.Hash(plain)
+	require.NoError(test, err)
+	second, err := hasher.Hash(plain)
+	require.NoError(test, err)
+
+	require.NotEqual(test, first, second, "у одинаковых паролей хеши должны отличаться из-за соли")
+}
+
+func TestBcryptBrokenHash(test *testing.T) {
+	err := newHasher().Verify("correct-horse", "not-a-bcrypt-hash")
+
+	require.Error(test, err)
+	require.NotErrorIs(test, err, domain.ErrWrongPassword, "битый хеш — это сбой, а не неверный пароль")
 }

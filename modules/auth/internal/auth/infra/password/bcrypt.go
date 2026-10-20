@@ -4,19 +4,22 @@ import (
 	"errors"
 
 	"golang.org/x/crypto/bcrypt"
+
+	"auth/internal/auth/domain"
 )
 
-var ErrEmptyPassword = errors.New("пароль должен быть заполнен")
+var _ domain.PasswordHasher = (*Bcrypt)(nil)
 
-func Hash(plain string) (string, error) {
-	if plain == "" {
-		return "", ErrEmptyPassword
-	}
+type Bcrypt struct {
+	cost int
+}
 
-	hash, err := bcrypt.GenerateFromPassword(
-		[]byte(plain),
-		bcrypt.DefaultCost,
-	)
+func NewBcrypt(cost int) *Bcrypt {
+	return &Bcrypt{cost: cost}
+}
+
+func (hasher *Bcrypt) Hash(password domain.Password) (string, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(password.Plain()), hasher.cost)
 
 	if err != nil {
 		return "", err
@@ -25,9 +28,12 @@ func Hash(plain string) (string, error) {
 	return string(hash), nil
 }
 
-func Verify(plainPassword string, hashedPassword string) error {
-	return bcrypt.CompareHashAndPassword(
-		[]byte(hashedPassword),
-		[]byte(plainPassword),
-	)
+func (hasher *Bcrypt) Verify(plain string, hash string) error {
+	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(plain))
+
+	if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
+		return domain.ErrWrongPassword
+	}
+
+	return err
 }
