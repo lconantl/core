@@ -3,5 +3,6 @@ go 1.27.1
 use (
 	./modules/auth
 	./modules/identity
+	./modules/session
 	lib
 )
