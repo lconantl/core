@@ -18,11 +18,18 @@ type Credentials struct {
 }
 
 func NewCredentials(userID uuid.UUID, username Username, password Password, hasher PasswordHasher) (*Credentials, error) {
+	err := validateIdentity(userID, username)
+
+	if err != nil {
+		return nil, err
+	}
+
 	if password.IsZero() {
 		return nil, ErrInvalidPassword
 	}
 
 	hash, err := hasher.Hash(password)
+
 	if err != nil {
 		return nil, err
 	}
@@ -31,12 +38,10 @@ func NewCredentials(userID uuid.UUID, username Username, password Password, hash
 }
 
 func LoadCredentials(userID uuid.UUID, username Username, passwordHash string) (*Credentials, error) {
-	if userID == uuid.Nil() {
-		return nil, ErrInvalidUserID
-	}
+	err := validateIdentity(userID, username)
 
-	if username.IsZero() {
-		return nil, ErrInvalidUsername
+	if err != nil {
+		return nil, err
 	}
 
 	if passwordHash == "" {
@@ -48,6 +53,18 @@ func LoadCredentials(userID uuid.UUID, username Username, passwordHash string) (
 		username:     username,
 		passwordHash: passwordHash,
 	}, nil
+}
+
+func validateIdentity(userID uuid.UUID, username Username) error {
+	if userID == uuid.Nil() {
+		return ErrInvalidUserID
+	}
+
+	if username.IsZero() {
+		return ErrInvalidUsername
+	}
+
+	return nil
 }
 
 func (credentials *Credentials) UserID() uuid.UUID {
