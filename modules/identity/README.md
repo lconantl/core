@@ -1,135 +1,52 @@
 # Identity service
 
-Рабочий пример использования go-sdk и исходник для генератора новых модулей.
+Представление пользователя: хранит ФИО, контакты, язык, описание и аватар, ведёт жизненный цикл пользователя (статус).
+Логина и пароля здесь нет, ими владеет auth.
 
-## Сценарий
+### Статусы
 
-```text
-HTTP / gRPC → app → unit of work → echo + outbox (одна MySQL-транзакция)
-                                             ↓
-                                      relay → RabbitMQ
-                                             ↓
-                              message-handler → inbox → лог
+- **pending** — регистрация начата, но ещё не завершена
+- **active** — обычный пользователь, может входить
+- **deleted** — удалён, терминальный статус, восстановления нет
+
+| Статус \ Метод | Activate()                 | Delete() |
+|----------------|----------------------------|----------|
+| pending        | active                     | deleted  |
+| active         | —                          | deleted  |
+| deleted        | ErrInvalidStatusTransition | —        |
+
+### Инварианты User
+
+| Правило                             | Где                    | Ошибка                     |
+|-------------------------------------|------------------------|----------------------------|
+| ID пользователя не пустой           | New/Load               | ErrInvalidUserID           |
+| статус — один из трёх               | Load                   | ErrInvalidUserStatus       |
+| новый пользователь всегда в pending | New                    | —                          |
+| профиль создан через NewProfile     | New/Load/UpdateProfile | ErrInvalidProfile          |
+| удалённого нельзя активировать      | Activate               | ErrInvalidStatusTransition |
+
+### Инварианты Profile
+
+| Правило                                                          | Где        | Ошибка                                   |
+|------------------------------------------------------------------|------------|------------------------------------------|
+| имя и фамилия: trim, 1–64 символа                                | NewProfile | ErrInvalidFirstName / ErrInvalidLastName |
+| почта: trim + нижний регистр, до 254 байт, только сам адрес      | NewProfile | ErrInvalidEmail                          |
+| телефон (необязательный): международный формат, хранится в E.164 | NewProfile | ErrInvalidPhone                          |
+| описание (необязательное): trim, до 70 символов                  | NewProfile | ErrInvalidDescription                    |
+| язык (необязательный): ru или en                                 | NewProfile | ErrInvalidLanguageCode                   |
+| аватар (необязательный): ID файла, пустой UUID — аватара нет     | NewProfile | —                                        |
+
+### Поведение
+
+Повторная активация и повторное удаление ничего не меняют и не возвращают ошибку, поэтому повторно доставленное событие
+безопасно. Удалить можно и незавершённую регистрацию — это откат сорвавшейся регистрации. Профиль проверяется один раз
+при создании: NewProfile проверяет все поля сразу и возвращает все найденные ошибки вместе, а невалидный профиль собрать
+нельзя — поля закрыты, нулевое значение отклоняется. Телефон проверяется библиотекой phonenumbers по правилам страны.
+Сам файл аватара хранится отдельно, в профиле лежит только его ID.
+
+### Проверки
+
+``` bash
+mise run //modules/identity:test
+mise run //modules/identity:lint
 ```
-
-HTTP: `POST /api/public/v1/echo` с JSON `{"body":"hello"}`. Ответ:
-`{"operationID":"<uuid>"}`. Пустая строка допустима; поле `body` обязательно.
-
-gRPC: `identityInternalAPI.IdentityService/Echo`, запрос `{"Body":"hello"}`,
-ответ с `OperationID`. Сервер поддерживает reflection:
-
-```sh
-grpcurl -plaintext -d '{"Body":"hello"}' localhost:8081 \
-  identityInternalAPI.IdentityService/Echo
-```
-
-Событие `identityEvents.Echo` содержит ID echo и исходную строку. SDK добавляет
-envelope с event ID, producer, type, временем и correlation ID. Общий exchange
-`domain-event` находится в `lib/event`; routing key модуля — `identity.Echo`.
-
-## Структура
-
-- `cmd`: конфигурация, команды запуска и файлы сборки зависимостей по подсистемам: MySQL, миграции, AMQP, события и серверы.
-- `internal/identity/app`: транзакционная граница через SDK `UnitOfWorkWithRepositoryProvider`.
-- `internal/identity/domain`: echo-модель, бизнес-операция, интерфейс репозитория и payload события; используется нативный пакет `uuid` Go 1.27.
-- `internal/identity/infra/mysql`: repository provider; `repository` содержит реализацию echo-репозитория, `migrations` — миграции модуля.
-- `internal/identity/infra/handlers`: HTTP, gRPC и события.
-- `internal/integration-tests`: инфраструктура, контейнеры и интеграционные проверки.
-- `api`: protobuf/OpenAPI-контракты; generated Go-код исключён из Git.
-
-Repository provider хранит транзакционный клиент и выдаёт репозиторий с контекстом
-операции. `app` использует `ExecuteWithRepositoryProvider`; SQL-клиент в него не
-передаётся. Outbox и репозиторий используют один context и один экземпляр UOW.
-
-## Запуск
-
-Из корня репозитория:
-
-```sh
-mise run local-up
-```
-
-Корневой mise автоматически подключает модульный `compose.yaml`, собирает бинарник
-и поднимает сервис и consumer в контейнерах.
-
-Бинарник поддерживает `service` (по умолчанию) и `message-handler`.
-`service` запускает HTTP, gRPC и relay. `message-handler` запускает consumer
-и HTTP `/healthz`. Health endpoint отвечает 204 и проверяет liveness.
-
-## Конфигурация
-
-| Переменная | Значение по умолчанию |
-| --- | --- |
-| `IDENTITY_APP_DEBUG` | `false` |
-| `IDENTITY_APP_GRACE_TIMEOUT` | `30s` |
-| `IDENTITY_HTTP_ADDRESS` | `:8082` |
-| `IDENTITY_GRPC_ADDRESS` | `:8081` |
-| `IDENTITY_MYSQL_ADDRESS` | `localhost:3306` |
-| `IDENTITY_MYSQL_DATABASE` | `identity` |
-| `IDENTITY_MYSQL_USER` | `identity` |
-| `IDENTITY_MYSQL_PASSWORD` | `identity` |
-| `IDENTITY_MYSQL_MAX_CONNECTIONS` | `10` |
-| `IDENTITY_MYSQL_CONNECTION_MAX_LIFETIME` | `30m` |
-| `IDENTITY_MYSQL_CONNECTION_MAX_IDLE_TIME` | `5m` |
-| `IDENTITY_MYSQL_CONNECT_TIMEOUT` | `5s` |
-| `IDENTITY_MYSQL_READ_TIMEOUT` | `10s` |
-| `IDENTITY_MYSQL_WRITE_TIMEOUT` | `10s` |
-| `IDENTITY_AMQP_URL` | `amqp://local:local@localhost:5672/` |
-| `IDENTITY_AMQP_QUEUE` | `identity.echo` |
-| `IDENTITY_AMQP_CONNECT_TIMEOUT` | `5s` |
-| `IDENTITY_AMQP_PREFETCH_COUNT` | `10` |
-| `IDENTITY_RELAY_INTERVAL` | `1s` |
-| `IDENTITY_RELAY_BATCH_SIZE` | `100` |
-| `IDENTITY_RELAY_PUBLISH_TIMEOUT` | `10s` |
-| `IDENTITY_RELAY_LOCK_TIMEOUT` | `1s` |
-
-DSN формируется рядом с connector через `mysqldriver.Config.FormatDSN()`;
-`parseTime` и `utf8mb4` включаются там же. `--debug` также включает подробные логи.
-Новые модули используют свой env-префикс.
-
-## Миграции и сборка
-
-```sh
-mise run //modules/identity:generate-migration "Create a new table"
-mise run //modules/identity:build
-```
-
-Генератор создаёт и регистрирует новую миграцию. Реализуйте `Up`: начальная
-заглушка возвращает ошибку. Обе команды сервиса применяют все таргеты миграций:
-модуль, outbox и inbox.
-
-`build` генерирует контракты и локально собирает Linux-бинарник `dist/identity`.
-Dockerfile только копирует его в образ. Для нативного запуска используйте задачу
-`run`, для выбора архитектуры Linux-сборки — `GOARCH`.
-
-## Гарантии
-
-Успех API означает commit echo и outbox. Ошибка внутри транзакции откатывает обе
-записи. Повторный API-запрос создаёт новый echo.
-
-Оба процесса объявляют durable-очередь. Relay использует publisher confirms и
-повторяет неудавшиеся публикации. API сохраняет операции при потере RabbitMQ
-после запуска; backlog отправляется после восстановления соединения. Ошибка
-подключения при первоначальном запуске останавливает процесс.
-
-Доставка at-least-once. Inbox подавляет повторную обработку зафиксированных
-`(consumer, event_id)`. Логирование не атомарно с commit inbox: при сбое возможен
-повторный лог. Ошибки consumer и невалидные события попадают в `<queue>.dead`
-через общий exchange `domain-event.dead`. Автоматический retry consumer не включён.
-
-HTTP и gRPC принудительно закрываются после grace timeout и возвращают ошибку,
-для которой `errors.Is(err, context.DeadlineExceeded)` истинно.
-Очистка outbox/inbox через SDK `Cleanup` в пример не входит.
-
-## Проверки
-
-```sh
-mise run //modules/identity:all
-mise run //modules/identity:integration-tests
-```
-
-Интеграционные тесты проверяют HTTP и gRPC API, запись события в outbox,
-обработку через inbox, повторную доставку и некорректные HTTP-запросы.
-Задача mise собирает Linux-бинарник и Docker-образ. Testcontainers запускает
-сервис и consumer из этого образа вместе с MySQL и RabbitMQ в отдельной сети.
-Тестовый MySQL-пароль содержит специальные символы для проверки DSN.
