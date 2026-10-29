@@ -1,135 +1,35 @@
 # Session service
 
-Рабочий пример использования go-sdk и исходник для генератора новых модулей.
+Состояние после входа - выдаёт, обновляет и отзывает токены, хранит список устройств.
 
-## Сценарий
+### Токены
 
-```text
-HTTP / gRPC → app → unit of work → echo + outbox (одна MySQL-транзакция)
-                                             ↓
-                                      relay → RabbitMQ
-                                             ↓
-                              message-handler → inbox → лог
+- **access** — 15 мин + подписанный, проверяется без БД. Не живёт дольше сессии
+- **refresh** — 30 дней + случайный, хранится как хеш. Каждый refresh выдаёт новый токен и продлевает сессию
+- Клиенту оба токена доставляются через BFF в httpOnly cookie
+
+### Инварианты Session
+
+| Правило                                      | Где                      | Ошибка                                 |
+|----------------------------------------------|--------------------------|----------------------------------------|
+| ID сессии и пользователя не пустые           | New/Load                 | ErrInvalidSessionID / ErrInvalidUserID |
+| хеш refresh не пустой и ≠ предыдущему        | New/Load/Refresh         | ErrInvalidTokenHash                    |
+| TTL > 0                                      | New/Refresh/AccessClaims | ErrInvalidTTL                          |
+| expiresAt > createdAt; revokedAt ≥ createdAt | Load                     | ErrInvalidSessionTime                  |
+| активна = не отозвана и now < expiresAt      | Refresh/AccessClaims     | ErrSessionRevoked / ErrSessionExpired  |
+| device: trim, обрезка до 255 символов        | New/Load                 | —                                      |
+
+### Поведение
+
+Сессию можно отозвать сколько угодно раз: дата отзыва сохраняется только при первом вызове, повторные вызовы её не
+меняют. При обновлении токена клиент получает новый refresh-токен, а старый перестаёт действовать. Если кто-то предъявит
+старый токен ещё раз, значит, его украли: сессия сразу отзывается и вход нужно повторить. В остальных случаях неудачное
+обновление сессию не меняет. Текущее время домен получает параметром и сам часы не читает, поэтому тесты не зависят от
+реального времени.
+
+### Проверки
+
+``` bash
+mise run //modules/session:test 
+mise run //modules/session:lint
 ```
-
-HTTP: `POST /api/public/v1/echo` с JSON `{"body":"hello"}`. Ответ:
-`{"operationID":"<uuid>"}`. Пустая строка допустима; поле `body` обязательно.
-
-gRPC: `sessionInternalAPI.SessionService/Echo`, запрос `{"Body":"hello"}`,
-ответ с `OperationID`. Сервер поддерживает reflection:
-
-```sh
-grpcurl -plaintext -d '{"Body":"hello"}' localhost:8081 \
-  sessionInternalAPI.SessionService/Echo
-```
-
-Событие `sessionEvents.Echo` содержит ID echo и исходную строку. SDK добавляет
-envelope с event ID, producer, type, временем и correlation ID. Общий exchange
-`domain-event` находится в `lib/event`; routing key модуля — `session.Echo`.
-
-## Структура
-
-- `cmd`: конфигурация, команды запуска и файлы сборки зависимостей по подсистемам: MySQL, миграции, AMQP, события и серверы.
-- `internal/session/app`: транзакционная граница через SDK `UnitOfWorkWithRepositoryProvider`.
-- `internal/session/domain`: echo-модель, бизнес-операция, интерфейс репозитория и payload события; используется нативный пакет `uuid` Go 1.27.
-- `internal/session/infra/mysql`: repository provider; `repository` содержит реализацию echo-репозитория, `migrations` — миграции модуля.
-- `internal/session/infra/handlers`: HTTP, gRPC и события.
-- `internal/integration-tests`: инфраструктура, контейнеры и интеграционные проверки.
-- `api`: protobuf/OpenAPI-контракты; generated Go-код исключён из Git.
-
-Repository provider хранит транзакционный клиент и выдаёт репозиторий с контекстом
-операции. `app` использует `ExecuteWithRepositoryProvider`; SQL-клиент в него не
-передаётся. Outbox и репозиторий используют один context и один экземпляр UOW.
-
-## Запуск
-
-Из корня репозитория:
-
-```sh
-mise run local-up
-```
-
-Корневой mise автоматически подключает модульный `compose.yaml`, собирает бинарник
-и поднимает сервис и consumer в контейнерах.
-
-Бинарник поддерживает `service` (по умолчанию) и `message-handler`.
-`service` запускает HTTP, gRPC и relay. `message-handler` запускает consumer
-и HTTP `/healthz`. Health endpoint отвечает 204 и проверяет liveness.
-
-## Конфигурация
-
-| Переменная | Значение по умолчанию |
-| --- | --- |
-| `SESSION_APP_DEBUG` | `false` |
-| `SESSION_APP_GRACE_TIMEOUT` | `30s` |
-| `SESSION_HTTP_ADDRESS` | `:8082` |
-| `SESSION_GRPC_ADDRESS` | `:8081` |
-| `SESSION_MYSQL_ADDRESS` | `localhost:3306` |
-| `SESSION_MYSQL_DATABASE` | `session` |
-| `SESSION_MYSQL_USER` | `session` |
-| `SESSION_MYSQL_PASSWORD` | `session` |
-| `SESSION_MYSQL_MAX_CONNECTIONS` | `10` |
-| `SESSION_MYSQL_CONNECTION_MAX_LIFETIME` | `30m` |
-| `SESSION_MYSQL_CONNECTION_MAX_IDLE_TIME` | `5m` |
-| `SESSION_MYSQL_CONNECT_TIMEOUT` | `5s` |
-| `SESSION_MYSQL_READ_TIMEOUT` | `10s` |
-| `SESSION_MYSQL_WRITE_TIMEOUT` | `10s` |
-| `SESSION_AMQP_URL` | `amqp://local:local@localhost:5672/` |
-| `SESSION_AMQP_QUEUE` | `session.echo` |
-| `SESSION_AMQP_CONNECT_TIMEOUT` | `5s` |
-| `SESSION_AMQP_PREFETCH_COUNT` | `10` |
-| `SESSION_RELAY_INTERVAL` | `1s` |
-| `SESSION_RELAY_BATCH_SIZE` | `100` |
-| `SESSION_RELAY_PUBLISH_TIMEOUT` | `10s` |
-| `SESSION_RELAY_LOCK_TIMEOUT` | `1s` |
-
-DSN формируется рядом с connector через `mysqldriver.Config.FormatDSN()`;
-`parseTime` и `utf8mb4` включаются там же. `--debug` также включает подробные логи.
-Новые модули используют свой env-префикс.
-
-## Миграции и сборка
-
-```sh
-mise run //modules/session:generate-migration "Create a new table"
-mise run //modules/session:build
-```
-
-Генератор создаёт и регистрирует новую миграцию. Реализуйте `Up`: начальная
-заглушка возвращает ошибку. Обе команды сервиса применяют все таргеты миграций:
-модуль, outbox и inbox.
-
-`build` генерирует контракты и локально собирает Linux-бинарник `dist/session`.
-Dockerfile только копирует его в образ. Для нативного запуска используйте задачу
-`run`, для выбора архитектуры Linux-сборки — `GOARCH`.
-
-## Гарантии
-
-Успех API означает commit echo и outbox. Ошибка внутри транзакции откатывает обе
-записи. Повторный API-запрос создаёт новый echo.
-
-Оба процесса объявляют durable-очередь. Relay использует publisher confirms и
-повторяет неудавшиеся публикации. API сохраняет операции при потере RabbitMQ
-после запуска; backlog отправляется после восстановления соединения. Ошибка
-подключения при первоначальном запуске останавливает процесс.
-
-Доставка at-least-once. Inbox подавляет повторную обработку зафиксированных
-`(consumer, event_id)`. Логирование не атомарно с commit inbox: при сбое возможен
-повторный лог. Ошибки consumer и невалидные события попадают в `<queue>.dead`
-через общий exchange `domain-event.dead`. Автоматический retry consumer не включён.
-
-HTTP и gRPC принудительно закрываются после grace timeout и возвращают ошибку,
-для которой `errors.Is(err, context.DeadlineExceeded)` истинно.
-Очистка outbox/inbox через SDK `Cleanup` в пример не входит.
-
-## Проверки
-
-```sh
-mise run //modules/session:all
-mise run //modules/session:integration-tests
-```
-
-Интеграционные тесты проверяют HTTP и gRPC API, запись события в outbox,
-обработку через inbox, повторную доставку и некорректные HTTP-запросы.
-Задача mise собирает Linux-бинарник и Docker-образ. Testcontainers запускает
-сервис и consumer из этого образа вместе с MySQL и RabbitMQ в отдельной сети.
-Тестовый MySQL-пароль содержит специальные символы для проверки DSN.

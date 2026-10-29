@@ -33,6 +33,10 @@ linters:
         - experimental
         - opinionated
   exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - goconst
     generated: lax
     presets:
       - comments
