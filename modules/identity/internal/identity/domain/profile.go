@@ -42,8 +42,8 @@ type ProfileFields struct {
 type Profile struct {
 	firstName    string
 	lastName     string
-	phone        string
 	email        string
+	phone        string
 	description  string
 	languageCode string
 	avatarID     uuid.UUID
