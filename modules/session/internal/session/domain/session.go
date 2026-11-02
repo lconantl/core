@@ -165,6 +165,10 @@ func (session *Session) Revoke(now time.Time) {
 		return
 	}
 
+	if now.Before(session.createdAt) {
+		now = session.createdAt
+	}
+
 	session.revokedAt = &now
 }
 
