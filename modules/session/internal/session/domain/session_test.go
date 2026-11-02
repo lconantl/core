@@ -351,3 +351,12 @@ func TestAccessClaimsActivity(test *testing.T) {
 		})
 	}
 }
+
+func TestRevokeBeforeCreation(test *testing.T) {
+	session := newSession(test)
+
+	session.Revoke(testNow.Add(-time.Minute))
+
+	revokedAt, _ := session.RevokedAt()
+	require.Equal(test, testNow, revokedAt, "отзыв не раньше создания, иначе сессию не загрузить")
+}
