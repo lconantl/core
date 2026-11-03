@@ -1,6 +1,9 @@
 package domain
 
-import "errors"
+import (
+	"errors"
+	"uuid"
+)
 
 var (
 	ErrUserNotFound = errors.New("пользователь не найден")
@@ -10,6 +13,7 @@ var (
 type UserRepository interface {
 	Add(user *User) error
 	Update(user *User) error
-	Find(id string) (*User, error)
-	FindByIDForUpdate(id string) (*User, error)
+	Delete(id uuid.UUID) error
+	FindByID(id uuid.UUID) (*User, error)
+	FindByIDForUpdate(id uuid.UUID) (*User, error)
 }
