@@ -47,7 +47,7 @@ func TestUserRepositoryAddAndFind(t *testing.T) {
 		FirstName:    "Степан",
 		LastName:     "Иванов",
 		Email:        uniqueEmail(),
-		Phone:        "+88005553535",
+		Phone:        "+79123456789",
 		Description:  "Мяу мяу мяу, спать хочу",
 		LanguageCode: "ru",
 		AvatarID:     uuid.New(),
