@@ -29,7 +29,7 @@ func (v *version1794632672) Up(ctx context.Context) error {
 	_, err := v.client.ExecContext(ctx, "create-users-table", `
 CREATE TABLE IF NOT EXISTS users (
     id CHAR(36) CHARACTER SET ascii NOT NULL,
-	status ENUM('pending', 'active') NOT NULL,
+	status ENUM('pending', 'active', 'deleted') NOT NULL,
     first_name VARCHAR(64) NOT NULL,
     last_name VARCHAR(64) NOT NULL,
 	email VARCHAR(254) NOT NULL,
