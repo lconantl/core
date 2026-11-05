@@ -19,6 +19,7 @@ type transition struct {
 func activate(user *domain.User) error {
 	return user.Activate()
 }
+
 func remove(user *domain.User) error {
 	user.Delete()
 	return nil
