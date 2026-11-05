@@ -1,12 +1,18 @@
 package domain
 
 import (
-	"context"
 	"errors"
+	"uuid"
 )
 
-var ErrCredentialsNotFound = errors.New("учётные данные не найдены")
+var (
+	ErrCredentialsNotFound = errors.New("учётные данные не найдены")
+	ErrUsernameTaken       = errors.New("логин уже занят")
+)
 
 type CredentialsRepository interface {
-	FindByUsername(ctx context.Context, username string) (*Credentials, error)
+	Add(credentials *Credentials) error
+	Update(credentials *Credentials) error
+	FindByUsername(username Username) (*Credentials, error)
+	FindByUserIDForUpdate(userID uuid.UUID) (*Credentials, error)
 }
